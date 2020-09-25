@@ -1,0 +1,122 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Subha"
+date: "22/09/2020"
+output: html_document
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+The goal is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. I will create a report describing how I have built my model, how I have used cross validation, what I think the expected out of sample error is, and why I have made the choices I did. I will also use your prediction model to predict 20 different test cases.
+
+
+## Data Description
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+## Loading the dataset and libraries
+
+```{r message=FALSE}
+suppressPackageStartupMessages({library(dplyr)
+library(ggplot2)
+library(caret)
+library(knitr)
+library(plotly)
+library(randomForest)
+library(gbm)
+library(rpart)
+library(rpart.plot)
+library(rattle)})
+
+train_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+init_org_training_data <- read.csv(url(train_url))
+init_org_testing_data <- read.csv(url(test_url))
+
+dim(init_org_training_data)
+dim(init_org_testing_data)
+```
+
+## Data Cleansing
+
+```{r}
+###Removing Variables which are having Nearly Zero Variance.
+nzv <- nearZeroVar(init_org_training_data)
+
+train_data <- init_org_training_data[,-nzv]
+test_data <- init_org_testing_data[,-nzv]
+
+###Removing NA Values of Variables.  
+na_val_col <- sapply(train_data, function(x) mean(is.na(x))) > 0.95
+train_data <- train_data[,na_val_col == FALSE]
+test_data <- test_data[,na_val_col == FALSE]
+
+###Removing the first 7 Variables which are Non-Numeric.  
+train_data<- train_data[, 8:59]
+test_data<- test_data[, 8:59]
+
+dim(train_data)
+dim(test_data)
+```
+
+## Data Partioning
+
+Following the recommendation in the course Practical Machine Learning, we will split our data into a training data set (60% of the total cases) and a testing data set (40% of the total cases; the latter should not be confused with the data in the pml-testing.csv file). This will allow us to estimate the out of sample error of our predictor.
+
+```{r}
+inTrain<- createDataPartition(train_data$classe, p=0.6, list=FALSE)
+training<- train_data[inTrain,]
+testing<- train_data[-inTrain,]
+
+dim(training)
+dim(testing)
+```
+
+## Decision Tree Model
+
+Using Decision Tree, we shouldn’t expect the accuracy to be high. In fact, anything around 80% would be acceptable.
+
+```{r}
+DT_model<- train(classe ~. , data=training, method= "rpart")
+DT_prediction<- predict(DT_model, testing)
+confusionMatrix(DT_prediction, as.factor(testing$classe))
+fancyRpartPlot(DT_model$finalModel)
+```
+
+We can see that the prediction accuracy is 58% which is not upto the desired level.
+
+## Decision Tree Model
+
+```{r}
+###Fit the model   
+RF_model<- train(classe ~. , data=training, method= "rf", ntree=100)
+###Prediction  
+RF_prediction<- predict(RF_model, testing)
+RF_cm<-confusionMatrix(RF_prediction, as.factor(testing$classe))
+RF_cm
+plot(RF_cm$table, col = RF_cm$byClass, 
+     main = paste("Random Forest - Accuracy Level =",
+                  round(RF_cm$overall['Accuracy'], 4)))
+```
+
+From the Confusion Matrix, we can clearly see that the prediction accuracy of Random Forest model is 99% which is satisfactory.
+
+## Final Prediction- Applying selected model on the Test Data
+
+```{r}
+Final_RF_prediction <- predict(RF_model, test_data )
+Final_RF_prediction
+```
